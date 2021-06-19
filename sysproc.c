@@ -6,6 +6,8 @@
 #include "memlayout.h"
 #include "mmu.h"
 #include "proc.h"
+#include "proc_info.h"
+
 
 int
 sys_fork(void)
@@ -88,4 +90,42 @@ sys_uptime(void)
   xticks = ticks;
   release(&tickslock);
   return xticks;
+}
+
+// Copying 4 elements of each processes ptable to send to user space (pid, memSize, state, name)
+extern struct proc_info * getptable_proc(void);
+
+int sys_proc_dump(void){
+    // these lines are for buffer ****
+    int size;
+    char *buf;
+    char *s;
+    // ****
+    struct proc_info *p = '\0';
+
+    // these function (argint, argptr) come from syscall.c file ****
+    if (argint(0, &size) <0){
+        return -1;
+    }
+    if (argptr(1, &buf,size) <0){
+        return -1;
+    }
+    // ****
+    s = buf;
+    p = getptable_proc(); // from line 96
+
+    // defining buffer size
+    while(buf + size > s){
+        *(int *)s = p -> pid;
+        s+=4;
+        *(int *)s = p->memsize;
+        s+=4;
+        *(int *)s = p->state;
+        s+=4;
+        memmove(s,p->name,16);
+        s+=16;
+        p++;
+    }
+    // return zero as successful
+    return 0;
 }

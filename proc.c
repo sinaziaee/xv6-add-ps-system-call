@@ -6,11 +6,17 @@
 #include "x86.h"
 #include "proc.h"
 #include "spinlock.h"
+#include "proc_info.h"
 
 struct {
   struct spinlock lock;
   struct proc proc[NPROC];
 } ptable;
+
+// simple list of proc_info to return to user programs that call proc_dump
+struct {
+    struct proc_info procInfo[NPROC];
+} procinfotable;
 
 static struct proc *initproc;
 
@@ -531,4 +537,119 @@ procdump(void)
     }
     cprintf("\n");
   }
+}
+
+//Syscall proc_dump
+
+struct proc_info *getptable_proc(void) {
+    struct proc *p;
+
+    cprintf("------------------------------ In system call --------------------------------\n");
+
+
+    int count = 0; // to count the number of processes in the ptable to use in procinfotable
+    int pcount = 0; // to count the number of not (UNUSED) processes
+    // trying to use ptable defined by xv6 creaters to initialize procinfotable structure and
+    // then send it back to user programs
+    for (p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+        // if the process is not UNUSED
+        if (p->sz > 0) {
+            procinfotable.procInfo[count].pid = p->pid;
+            procinfotable.procInfo[count].memsize = p->sz;
+            procinfotable.procInfo[count].state = p->state;
+            int i = 0;
+            // the name of process is 16 bits (chars) so we can loop on the name and initialize the names in procinfotable.procInfo list
+            while (i != 16) {
+                procinfotable.procInfo[count].name[i] = p->name[i];
+                i++;
+            }
+            // printing each process's information
+            cprintf("PID: %d   -    SIZE: %d    -    STATE: %d     -     NAME: %s\n", p->pid, p->sz, p->state, p->name);
+            pcount++;
+        }
+        count++;
+    }
+
+    // *****
+    // the remaining code is actually not important and you can simply uncomment below code
+    //              return procinfotable.procInfo;
+    // you can also don't uncomment the above code and continue with below code
+    // (I'm just sorting these processes below)
+    // *****
+
+    // for those who want to know what I'm doing now , i'm try to get the not UNUSED processes and
+    // the sort them and after that return all the processes to the user program as an array of proc_info
+    // structure
+
+    // an array of proc_info with the number of UNUSED processes
+    struct proc_info listProc[pcount];
+
+    // initialising listProc
+    int i = 0;
+    struct proc_info *pi;
+    for (pi = procinfotable.procInfo; pi < &procinfotable.procInfo[NPROC]; pi++) {
+        if (pi->memsize > 0) {
+            listProc[i].memsize = pi->memsize;
+            listProc[i].pid = pi->pid;
+            listProc[i].state = pi->state;
+            int j = 0;
+            while (j != 16) {
+                listProc[i].name[j] = pi->name[j];
+                j++;
+            }
+            i++;
+        }
+    }
+
+    // Using simple sort algorithm (bubble sort) to sort the processes in listProc by process size
+    for (i = 0; i < pcount - 1; ++i) {
+        for (int j = 0; j < pcount - 1; ++j) {
+            if (listProc[j].memsize >= listProc[j + 1].memsize) {
+                int size = listProc[j].memsize;
+                int state = listProc[j].state;
+                int pid = listProc[j].pid;
+                char name[16];
+                int k = 0;
+                while (k != 16) {
+                    name[k] = procinfotable.procInfo[j].name[k];
+                    k++;
+                }
+                listProc[j].memsize = listProc[j + 1].memsize;
+                listProc[j].pid = listProc[j + 1].pid;
+                listProc[j].state = listProc[j + 1].state;
+                k = 0;
+                while (k != 16) {
+                    listProc[j].name[k] = listProc[j + 1].name[k];
+                    k++;
+                }
+                listProc[j + 1].memsize = size;
+                listProc[j + 1].pid = pid;
+                listProc[j + 1].state = state;
+                k = 0;
+                while (k != 16) {
+                    listProc[j + 1].name[k] = name[k];
+                    k++;
+                }
+            }
+        }
+    }
+
+    // changing the top procinfotable.procInfo list with the sorted listProc processes
+
+    for (int j = 0; j < pcount; ++j) {
+        procinfotable.procInfo[j].state = listProc[j].state;
+        procinfotable.procInfo[j].pid = listProc[j].pid;
+        procinfotable.procInfo[j].memsize = listProc[j].memsize;
+        int k = 0;
+        while (k != 16) {
+            procinfotable.procInfo[j].name[k] = listProc[j].name[k];
+            k++;
+        }
+    }
+
+    cprintf("--------------- In user program (sorted in system call by size) ---------------\n");
+
+    // returning the list of proc_info to user programs that call this system call
+    return procinfotable.procInfo;
+
 }
