@@ -1,5 +1,0 @@
-## Add system call to xv6
-
-In this project i tried to add a ps system call
-which returns an array of processes information
-
